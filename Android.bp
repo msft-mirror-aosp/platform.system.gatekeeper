@@ -17,6 +17,7 @@
 cc_library_shared {
     name: "libgatekeeper",
     vendor_available: true,
+    host_supported: true,
     vndk: {
         enabled: true,
     },
