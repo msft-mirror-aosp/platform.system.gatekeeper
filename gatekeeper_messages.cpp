@@ -280,5 +280,8 @@ gatekeeper_error_t EnrollResponse::nonErrorDeserialize(const uint8_t *payload, c
     return read_from_buffer(&payload, end, &enrolled_password_handle);
 }
 
+DeleteUserRequest::DeleteUserRequest(uint32_t user_id) {
+    this->user_id = user_id;
+}
 };
 
