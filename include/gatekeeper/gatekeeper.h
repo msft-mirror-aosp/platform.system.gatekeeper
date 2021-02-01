@@ -44,6 +44,8 @@ public:
 
     void Enroll(const EnrollRequest &request, EnrollResponse *response);
     void Verify(const VerifyRequest &request, VerifyResponse *response);
+    void DeleteUser(const DeleteUserRequest &request, DeleteUserResponse *response);
+    void DeleteAllUsers(const DeleteAllUsersRequest &request, DeleteAllUsersResponse *response);
 
 protected:
 
