@@ -117,6 +117,20 @@ protected:
     virtual uint64_t GetMillisecondsSinceBoot() const = 0;
 
     /**
+     * Removes all records for the given user.
+     *
+     * Returns true if the user's records were successfully deleted.
+     */
+    virtual gatekeeper_error_t RemoveUser(uint32_t /* uid */) { return ERROR_NOT_IMPLEMENTED; }
+
+    /**
+     * Removes all records.
+     *
+     * Returns true if the records were successfully deleted.
+     */
+    virtual gatekeeper_error_t RemoveAllUsers() { return ERROR_NOT_IMPLEMENTED; }
+
+    /**
      * Returns the value of the current failure record for the user.
      *
      * The failure record should be written to hardware-backed secure storage, such as

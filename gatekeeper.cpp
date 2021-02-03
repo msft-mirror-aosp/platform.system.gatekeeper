@@ -163,13 +163,18 @@ void GateKeeper::Verify(const VerifyRequest &request, VerifyResponse *response) 
     }
 }
 
-void GateKeeper::DeleteUser(const DeleteUserRequest &/*request*/, DeleteUserResponse *response) {
-    response->error = ERROR_NOT_IMPLEMENTED;
+void GateKeeper::DeleteUser(const DeleteUserRequest &request, DeleteUserResponse *response) {
+    if (response == nullptr) return;
+
+    uint32_t uid = request.user_id;
+    response->error = RemoveUser(uid);
 }
 
 void GateKeeper::DeleteAllUsers(const DeleteAllUsersRequest &/*request*/,
         DeleteAllUsersResponse *response) {
-    response->error = ERROR_NOT_IMPLEMENTED;
+    if (response == nullptr) return;
+
+    response->error = RemoveAllUsers();
 }
 
 bool GateKeeper::CreatePasswordHandle(SizedBuffer *password_handle_buffer, salt_t salt,
