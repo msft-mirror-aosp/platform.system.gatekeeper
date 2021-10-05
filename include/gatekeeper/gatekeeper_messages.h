@@ -29,8 +29,6 @@ namespace gatekeeper {
 
 const uint32_t ENROLL = 0;
 const uint32_t VERIFY = 1;
-const uint32_t DELETE_USER = 2;
-const uint32_t DELETE_ALL_USERS = 3;
 
 typedef enum {
     ERROR_NONE = 0,
