@@ -38,7 +38,14 @@ cc_library_shared {
     header_libs: [
         "libhardware_headers",
     ],
-
+    target: {
+        windows: {
+            enabled: true,
+            host_ldlibs: [
+                "-lws2_32",
+            ],
+        },
+    },
     export_include_dirs: ["include"],
 
 }
