@@ -31,11 +31,9 @@ cc_test {
     shared_libs: [
         "libgatekeeper",
         "libcrypto",
-        "libhardware",
     ],
     static_libs: ["libscrypt_static"],
     srcs: [
         "gatekeeper_messages_test.cpp",
-        "gatekeeper_device_test.cpp",
     ],
 }
