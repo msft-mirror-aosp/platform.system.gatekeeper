@@ -22,12 +22,14 @@ use gk_wire as wire;
 use hal_wire::{mem::vec_try_with_capacity, AsCborValue};
 use log::{debug, error, info, trace, warn};
 use wire::{
-    AndroidUserId, ApiStatus, Code, DeleteAllUsersResponse, DeleteUserResponse, EnrollResponse,
-    GatekeeperOperation, HardwareAuthToken, MillisecondsSinceEpoch, Password, PerformOpReq,
-    PerformOpResponse, PerformOpRsp, SecureUserId, VerifyResponse,
+    AndroidUserId, ApiStatus, Code, ComputeSharedSecretResponse, DeleteAllUsersResponse,
+    DeleteUserResponse, EnrollResponse, GatekeeperOperation, GetSharedSecretParamsResponse,
+    HardwareAuthToken, MillisecondsSinceEpoch, Password, PerformOpReq, PerformOpResponse,
+    PerformOpRsp, SecureUserId, SharedSecretError, VerifyResponse,
 };
 
 mod handle;
+mod secret;
 #[cfg(test)]
 mod tests;
 pub mod traits;
@@ -61,12 +63,15 @@ impl From<alloc::collections::TryReserveError> for Error {
 pub struct GatekeeperTa {
     /// Device-specific trait implementation.  Fixed on construction.
     imp: traits::Implementation,
+
+    /// Parameters for shared secret negotiation.  Set after TA start, latched thereafter.
+    shared_secret_params: Option<wire::SharedSecretParameters>,
 }
 
 impl GatekeeperTa {
     /// Create a new [`GatekeeperTa`] instance.
     pub fn new(imp: traits::Implementation) -> Self {
-        Self { imp }
+        Self { imp, shared_secret_params: None }
     }
 
     /// Process a single serialized request, returning a serialized response.
@@ -133,8 +138,20 @@ impl GatekeeperTa {
             }
 
             // ISharedSecret messages.
-            PerformOpReq::GetSharedSecretParams(_req) => todo!(),
-            PerformOpReq::ComputeSharedSecret(_req) => todo!(),
+            PerformOpReq::GetSharedSecretParams(req) => match self.get_shared_secret_params() {
+                Ok(params) => PerformOpResponse::Ok(PerformOpRsp::GetSharedSecretParams(
+                    GetSharedSecretParamsResponse { params },
+                )),
+                Err(e) => ss_error_rsp(req.code(), e),
+            },
+            PerformOpReq::ComputeSharedSecret(req) => {
+                match self.compute_shared_secret(&req.params) {
+                    Ok(sharing_check) => PerformOpResponse::Ok(PerformOpRsp::ComputeSharedSecret(
+                        ComputeSharedSecretResponse { sharing_check },
+                    )),
+                    Err(e) => ss_error_rsp(req.code(), e),
+                }
+            }
         }
     }
 
@@ -379,6 +396,21 @@ fn gk_error_rsp(op: GatekeeperOperation, err: Error) -> PerformOpResponse {
         | Error::VerifyFailed
         | Error::InvalidArgument => PerformOpResponse::Err(wire::ApiStatus::GeneralFailure as i32),
     }
+}
+
+/// Create a response structure with the given error converted to an error code for the shared
+/// secret API.
+fn ss_error_rsp(op: GatekeeperOperation, err: Error) -> PerformOpResponse {
+    warn!("failing {op:?} request with error {err:?}");
+    let api_err = match err {
+        Error::RetryTimeout(_) | Error::VerifyFailed | Error::Internal | Error::NotFound => {
+            SharedSecretError::UnknownError
+        }
+        Error::Unimplemented => SharedSecretError::Unimplemented,
+        Error::InvalidArgument => SharedSecretError::InvalidArgument,
+        Error::AllocationFailed => SharedSecretError::MemoryAllocationFailed,
+    };
+    PerformOpResponse::Err(api_err as i32)
 }
 
 /// Hand-encoded [`PerformOpResponse`] data for [`ApiStatus::GeneralFailure`].
