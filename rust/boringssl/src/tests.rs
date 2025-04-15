@@ -40,6 +40,12 @@ fn test_eq() {
 }
 
 #[test]
+fn test_constant_time_eq() {
+    let comparator = crate::ConstEq;
+    gk_tests::test_constant_time_eq(comparator);
+}
+
+#[test]
 fn test_hmac() {
     let hmac = crate::HmacSha256;
     gk_tests::test_hmac(hmac);
