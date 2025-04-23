@@ -38,13 +38,13 @@ pub const FLAG_RESERVED: u64 = 0x01;
 /// Handle for an enrolled password.
 #[derive(Debug, PartialEq)]
 pub struct PasswordHandle {
-    // Fields included in the signature
+    // Fields included in the MAC input.
     version: u8,
     sid: SecureUserId,
     flags: u64,
+    salt: u64,
 
     // Un-MAC-ed fields.
-    salt: u64,
     mac: [u8; 32],
     hw_backed: bool,
 }
@@ -62,6 +62,8 @@ const SERIALIZED_LEN: usize = SERIALIZED_VERSION_LEN
     + SERIALIZED_SALT_LEN
     + SERIALIZED_MAC_LEN
     + SERIALIZED_HW_BACKED_LEN;
+const MAC_INPUT_PREFIX_LEN: usize =
+    SERIALIZED_SALT_LEN + SERIALIZED_VERSION_LEN + SERIALIZED_SID_LEN + SERIALIZED_FLAGS_LEN;
 
 // Offsets of serialized fields.
 const VERSION_OFFSET: usize = 0;
@@ -148,12 +150,12 @@ impl PasswordHandle {
         hmac: &dyn traits::HmacSha256,
         password: &wire::Password,
     ) -> Result<[u8; 32], Error> {
-        const METADATA_LEN: usize = 1 + 8 + 8;
-        let mut to_mac = mem::vec_try_with_capacity(password.0.len() + METADATA_LEN)?;
-        to_mac.extend_from_slice(&password.0);
+        let mut to_mac = mem::vec_try_with_capacity(MAC_INPUT_PREFIX_LEN + password.0.len())?;
+        to_mac.extend_from_slice(&self.salt.to_ne_bytes());
         to_mac.push(self.version);
         to_mac.extend_from_slice(&self.sid.0.to_ne_bytes());
         to_mac.extend_from_slice(&self.flags.to_ne_bytes());
+        to_mac.extend_from_slice(&password.0);
 
         let mac = hmac.sign(key, &to_mac)?;
         mac.try_into().map_err(|_| Error::Internal)
