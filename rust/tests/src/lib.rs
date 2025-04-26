@@ -20,6 +20,7 @@ use gk_ta::traits::{
 };
 use gk_ta::FailureRecord;
 use gk_wire::{AndroidUserId, MillisecondsSinceEpoch, SecureUserId};
+use std::time::Duration;
 
 /// Test basic [`Rng`] functionality.
 pub fn test_rng<R: Rng>(rng: &mut R) {
@@ -60,6 +61,87 @@ pub fn test_eq<E: ConstTimeEq>(comparator: E) {
     assert!(comparator.ne(&b1, &b3));
     assert!(comparator.ne(&b1, &b4));
     assert!(comparator.ne(&b5, &b6));
+}
+
+/// Test the constant-time property for [`ConstTimeEq`] functionality.
+pub fn test_constant_time_eq<E: ConstTimeEq>(cmp: E) {
+    const LEN: usize = 4096;
+    let base = [42; LEN];
+    let same = base;
+
+    // Change a bit in the last byte.
+    let mut last = base;
+    last[last.len() - 1] ^= 0x01;
+    // Change a bit in the first byte.
+    let mut first = base;
+    first[0] ^= 0x01;
+
+    assert!(cmp.eq(&base, &base));
+    assert!(cmp.ne(&base, &first));
+    assert!(cmp.ne(&base, &last));
+
+    // Benchmark comparisons with first and last bytes holding a difference.
+    let same_duration = bench(|| cmp.eq(&base, &same));
+    let first_duration = bench(|| cmp.eq(&base, &first));
+    let last_duration = bench(|| cmp.eq(&base, &last));
+
+    println!("comparing same {LEN}-byte chunk takes {same_duration:?}");
+    println!("comparing {LEN}-byte chunk with differing first byte takes {first_duration:?}");
+    println!("comparing {LEN}-byte chunk with differing last byte takes {last_duration:?}");
+    check_same(&same_duration, &first_duration);
+    check_same(&same_duration, &last_duration);
+    check_same(&first_duration, &last_duration);
+}
+
+fn check_same(base: &Duration, other: &Duration) {
+    let delta_nanos = base.as_nanos().abs_diff(other.as_nanos());
+    let pct_diff = 100.0 * delta_nanos as f64 / base.as_nanos() as f64;
+    assert!(
+        pct_diff < 10.0,
+        "percentage difference {pct_diff}% between {base:?} and {other:?} should be < 10%"
+    );
+}
+
+/// Repeatedly run the given closure and return average iteration time.
+fn bench<F>(mut f: F) -> Duration
+where
+    F: FnMut() -> bool,
+{
+    const WARMUP_ITERATIONS: u32 = 5;
+    let mut duration = Duration::ZERO;
+    println!("  warmup for {WARMUP_ITERATIONS}...");
+    for _ in 0..WARMUP_ITERATIONS {
+        duration += time(&mut f);
+    }
+    let warmup = duration / WARMUP_ITERATIONS;
+    println!("  warmup for {WARMUP_ITERATIONS}...done in {duration:?} average {warmup:?}");
+
+    // Guess at rough number of iterations that fit in 2s = 2000ms.
+    let iterations = if warmup > Duration::from_secs(1) {
+        3
+    } else {
+        Duration::from_secs(2).as_nanos() / warmup.as_nanos()
+    };
+    let iterations = u32::try_from(iterations).unwrap_or(u32::MAX);
+
+    println!("  iterate for {iterations}...");
+    let mut duration = Duration::ZERO;
+    for _ in 0..iterations {
+        duration += time(&mut f);
+    }
+    let result = duration / iterations;
+    println!("  warmup for {iterations}...done in {duration:?} average {result:?}");
+    result
+}
+
+#[inline]
+fn time<F>(f: &mut F) -> Duration
+where
+    F: FnMut() -> bool,
+{
+    let start = std::time::Instant::now();
+    let _ = f();
+    start.elapsed()
 }
 
 /// Test basic [`MonotonicClock`] functionality.
@@ -201,4 +283,23 @@ pub fn test_shared_secret_derive<T: AesCmac>(aes_cmac: T) {
         hex::encode(result.0.clone()),
         "ac9af88a02241f53d43056a4676c42eef06825755e419e7bd20f4e57487717aa"
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use gk_ta::traits::ConstTimeEq;
+
+    /// Tests for the tests.
+    #[test]
+    #[should_panic]
+    fn test_non_constant_eq() {
+        struct NonConstEq;
+        impl ConstTimeEq for NonConstEq {
+            fn eq(&self, left: &[u8], right: &[u8]) -> bool {
+                left == right
+            }
+        }
+        // A naive implementation of `NonConstEq` will fail the test.
+        super::test_constant_time_eq(NonConstEq);
+    }
 }
