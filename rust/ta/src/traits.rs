@@ -69,7 +69,8 @@ pub trait AuthKeyManagement: Send {
 
 /// Abstraction of persistent password key.
 pub trait PasswordKeyRetrieval: Send {
-    /// Retrieve the persistent password key.
+    /// Retrieve the persistent password key.  The same key must remain available after factory
+    /// reset (as Gatekeeper authentication is required for clearing factory reset protection).
     fn key(&self) -> Result<OpaqueOr<HmacKey>, Error>;
 }
 
@@ -153,7 +154,8 @@ impl From<HmacKey> for OpaqueOr<HmacKey> {
 }
 
 /// Abstraction of the device-specific functionality for managing failure records.  These records
-/// must be persistent across boots (but not factory resets).
+/// must be persistent across boots and across factory reset (to allow for clearing factory
+/// reset protection).
 pub trait FailureRecording {
     /// Retrieve the failure record for the specified `user_id`.
     fn get(&self, user_id: AndroidUserId) -> Result<Option<FailureRecord>, Error>;
