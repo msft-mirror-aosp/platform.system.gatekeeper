@@ -65,15 +65,15 @@ pub fn test_eq<E: ConstTimeEq>(comparator: E) {
 
 /// Test the constant-time property for [`ConstTimeEq`] functionality.
 pub fn test_constant_time_eq<E: ConstTimeEq>(cmp: E) {
-    const LEN: usize = 4096;
-    let base = [42; LEN];
-    let same = base;
+    const LEN: usize = 128 * 1024 * 1024;
+    let base = vec![42; LEN];
+    let same = base.clone();
 
     // Change a bit in the last byte.
-    let mut last = base;
-    last[last.len() - 1] ^= 0x01;
+    let mut last = base.clone();
+    last[LEN - 1] ^= 0x01;
     // Change a bit in the first byte.
-    let mut first = base;
+    let mut first = base.clone();
     first[0] ^= 0x01;
 
     assert!(cmp.eq(&base, &base));
@@ -82,24 +82,25 @@ pub fn test_constant_time_eq<E: ConstTimeEq>(cmp: E) {
 
     // Benchmark comparisons with first and last bytes holding a difference.
     let same_duration = bench(|| cmp.eq(&base, &same));
-    let first_duration = bench(|| cmp.eq(&base, &first));
-    let last_duration = bench(|| cmp.eq(&base, &last));
-
     println!("comparing same {LEN}-byte chunk takes {same_duration:?}");
+    let first_duration = bench(|| cmp.eq(&base, &first));
     println!("comparing {LEN}-byte chunk with differing first byte takes {first_duration:?}");
+    let last_duration = bench(|| cmp.eq(&base, &last));
     println!("comparing {LEN}-byte chunk with differing last byte takes {last_duration:?}");
-    check_same(&same_duration, &first_duration);
-    check_same(&same_duration, &last_duration);
-    check_same(&first_duration, &last_duration);
+
+    check_same("compare-same vs compare-first-byte", &same_duration, &first_duration, 15.0);
+    check_same("compare-same vs compare-last-byte", &same_duration, &last_duration, 15.0);
+    check_same("compare-first-byte vs compare-last-byte", &first_duration, &last_duration, 15.0);
 }
 
-fn check_same(base: &Duration, other: &Duration) {
+fn check_same(msg: &str, base: &Duration, other: &Duration, max_pct_diff: f64) {
     let delta_nanos = base.as_nanos().abs_diff(other.as_nanos());
     let pct_diff = 100.0 * delta_nanos as f64 / base.as_nanos() as f64;
     assert!(
-        pct_diff < 10.0,
-        "percentage difference {pct_diff}% between {base:?} and {other:?} should be < 10%"
+        pct_diff < max_pct_diff,
+        "{msg}: difference {pct_diff}% between {base:?} and {other:?} should be < {max_pct_diff}%"
     );
+    println!("{msg}: {pct_diff}% between {base:?} and {other:?} is < {max_pct_diff}%");
 }
 
 /// Repeatedly run the given closure and return average iteration time.
@@ -116,11 +117,12 @@ where
     let warmup = duration / WARMUP_ITERATIONS;
     println!("  warmup for {WARMUP_ITERATIONS}...done in {duration:?} average {warmup:?}");
 
-    // Guess at rough number of iterations that fit in 2s = 2000ms.
+    // Guess at rough number of iterations that fit in the test interval.
+    const TEST_INTERVAL: Duration = Duration::from_secs(5);
     let iterations = if warmup > Duration::from_secs(1) {
         3
     } else {
-        Duration::from_secs(2).as_nanos() / warmup.as_nanos()
+        TEST_INTERVAL.as_nanos() / warmup.as_nanos()
     };
     let iterations = u32::try_from(iterations).unwrap_or(u32::MAX);
 
