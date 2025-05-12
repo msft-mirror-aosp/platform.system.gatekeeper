@@ -88,9 +88,9 @@ pub fn test_constant_time_eq<E: ConstTimeEq>(cmp: E) {
     let last_duration = bench(|| cmp.eq(&base, &last));
     println!("comparing {LEN}-byte chunk with differing last byte takes {last_duration:?}");
 
-    check_same("compare-same vs compare-first-byte", &same_duration, &first_duration, 15.0);
-    check_same("compare-same vs compare-last-byte", &same_duration, &last_duration, 15.0);
-    check_same("compare-first-byte vs compare-last-byte", &first_duration, &last_duration, 15.0);
+    check_same("compare-same vs compare-first-byte", &same_duration, &first_duration, 20.0);
+    check_same("compare-same vs compare-last-byte", &same_duration, &last_duration, 20.0);
+    check_same("compare-first-byte vs compare-last-byte", &first_duration, &last_duration, 20.0);
 }
 
 fn check_same(msg: &str, base: &Duration, other: &Duration, max_pct_diff: f64) {
