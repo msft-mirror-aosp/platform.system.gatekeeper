@@ -78,50 +78,40 @@ fn test_password_handle_roundtrip() {
 
 #[test]
 fn test_retry_timeout() {
-    const ONE_DAY: u32 = 24 * 60 * 60 * 1000;
-    let tests = [
-        (0, 0),
-        (1, 0),
-        (1, 0),
-        (5, 30_000),
-        (6, 0),
-        (7, 0),
-        (8, 0),
-        (9, 0),
-        (10, 0),
-        (11, 30_000),
-        (18, 30_000),
-        (22, 30_000),
-        (29, 30_000),
-        (30, 30_000),
-        (31, 30_000),
-        (32, 30_000),
-        (39, 30_000),
-        (40, 60_000),
-        (49, 60_000),
-        (50, 120_000),
-        (59, 120_000),
-        (60, 240_000),
-        (69, 240_000),
-        (70, 480_000),
-        (79, 480_000),
-        (80, 960_000),
-        (89, 960_000),
-        (90, 1_920_000),
-        (99, 1_920_000),
-        (100, 3_840_000),
-        (109, 3_840_000),
-        (110, 7_680_000),
-        (119, 7_680_000),
-        (120, 15_360_000),
-        (129, 15_360_000),
-        (130, 30_720_000),
-        (139, 30_720_000),
-        (140, ONE_DAY),
-        (141, ONE_DAY),
-        (14100, ONE_DAY),
+    let expected_timeouts_in_minutes = [
+        /* 0  */ 0, //
+        /* 1  */ 0, //
+        /* 2  */ 0, //
+        /* 3  */ 0, //
+        /* 4  */ 0, //
+        /* 5  */ 1, //
+        /* 6  */ 5, //
+        /* 7  */ 15, //
+        /* 8  */ 30, //
+        /* 9  */ 90, //
+        /* 10 */ 243, // 3^(10-5) minutes = 4.05 hours
+        /* 11 */ 729, // 3^(11-5) minutes = 12.15 hours
+        /* 12 */ 2187, // 3^(12-5) minutes = 36.45 hours
+        /* 13 */ 6561, // 3^(13-5) minutes = 4.56 days
+        /* 14 */ 19683, // 3^(14-5) minutes = 13.67 days
+        /* 15 */ 59049, // 3^(15-5) minutes = 41.01 days
+        /* 16 */ 177147, // 3^(16-5) minutes = 123.02 days
+        /* 17 */ 531441, // 3^(17-5) minutes = 1.01 years
+        /* 18 */ 1594323, // 3^(18-5) minutes = 3.03 years
+        /* 19 */ 4782969, // 3^(19-5) minutes = 9.09 years
     ];
-    for (count, want) in tests {
+    for count in 0..20 {
+        let want = Ok(expected_timeouts_in_minutes[count as usize] * 60000);
+        let record = FailureRecord {
+            sid: SecureUserId(1),
+            last_checked_timestamp: MillisecondsSinceEpoch(1),
+            failure_counter: count,
+        };
+        let got = record.compute_retry_timeout();
+        assert_eq!(got, want, "for count={count}");
+    }
+    for count in 20..100 {
+        let want = Err(Error::RetryTimeout(i32::MAX));
         let record = FailureRecord {
             sid: SecureUserId(1),
             last_checked_timestamp: MillisecondsSinceEpoch(1),

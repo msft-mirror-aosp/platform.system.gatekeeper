@@ -35,7 +35,7 @@ mod tests;
 pub mod traits;
 
 /// Errors encountered in TA processing.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Error {
     /// Memory allocation failure.
     AllocationFailed,
@@ -255,7 +255,7 @@ impl GatekeeperTa {
 
         if self.verify_password(&handle, password).is_err() {
             warn!("password verification failed");
-            let timeout: i32 = record.compute_retry_timeout().try_into().unwrap_or(i32::MAX);
+            let timeout: i32 = record.compute_retry_timeout()?.try_into().unwrap_or(i32::MAX);
             if timeout > 0 {
                 warn!("try again after {timeout}");
                 return Err(Error::RetryTimeout(timeout));
@@ -327,7 +327,7 @@ impl GatekeeperTa {
         record: &mut FailureRecord,
         now: MillisecondsSinceEpoch,
     ) -> Result<(), Error> {
-        let timeout = record.compute_retry_timeout();
+        let timeout = record.compute_retry_timeout()?;
         if timeout == 0 {
             return Ok(());
         }
@@ -341,7 +341,7 @@ impl GatekeeperTa {
             );
             record.last_checked_timestamp = now;
             self.write_failure_record(user_id, record)?;
-            Err(Error::RetryTimeout(timeout as i32))
+            Err(Error::RetryTimeout(timeout.try_into().unwrap_or(i32::MAX)))
         } else if record.last_checked_timestamp < now && now < deadline {
             let remaining = deadline.0 - now.0;
             info!("in throttle period for {user_id:?}, {remaining}ms remaining");
@@ -471,22 +471,22 @@ impl FailureRecord {
 
     /// Compute the next timeout for the failure record, in milliseconds, based on
     /// the failure count.
-    ///
-    /// - [0, 4] => 0
-    /// - 5 => 30
-    /// - [6, 10] => 0
-    /// - [11, 29] => 30
-    /// - [30, 139] => 30 * (2^((x - 30)/10))
-    /// - [140, inf) => 1 day
-    pub fn compute_retry_timeout(&self) -> u32 {
-        const THIRTY_SECONDS: u32 = 30_000;
+    pub fn compute_retry_timeout(&self) -> Result<i64, Error> {
         match self.failure_counter {
-            0..5 => 0,
-            5 => THIRTY_SECONDS,
-            6..11 => 0,
-            11..30 => THIRTY_SECONDS,
-            count @ 30..140 => THIRTY_SECONDS * (1 << ((count - 30) / 10)),
-            140..=u32::MAX => 1000 * 60 * 60 * 24,
+            0..=4 => Ok(0),
+            5 => Ok(60000),   // 1 minute
+            6 => Ok(300000),  // 5 minutes
+            7 => Ok(900000),  // 15 minutes
+            8 => Ok(1800000), // 30 minutes
+            9 => Ok(5400000), // 90 minutes
+            10..=19 => {
+                // Exponential increase from 4.05 hours to 9.09 years
+                Ok(3_i64.pow(self.failure_counter - 5) * 60000)
+            }
+            _ => {
+                info!("no more attempts allowed after {} failures", self.failure_counter);
+                Err(Error::RetryTimeout(i32::MAX))
+            }
         }
     }
 }
