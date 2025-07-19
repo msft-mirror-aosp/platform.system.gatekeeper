@@ -26,8 +26,6 @@
 
 #include <stddef.h>
 
-#define DAY_IN_MS (1000 * 60 * 60 * 24)
-
 #ifdef _WIN32
 __forceinline uint64_t htonll_gk(uint64_t value) {
     return (((uint64_t)htonl(value & 0xFFFFFFFFUL)) << 32) | htonl((uint32_t)(value >> 32));
@@ -35,6 +33,11 @@ __forceinline uint64_t htonll_gk(uint64_t value) {
 #endif
 
 namespace gatekeeper {
+
+static void ClampAndSetRetryTimeout(GateKeeperMessage *response, uint64_t timeout) {
+    if (timeout > INT32_MAX) timeout = INT32_MAX;
+    response->SetRetryTimeout(timeout);
+}
 
 void GateKeeper::Enroll(const EnrollRequest &request, EnrollResponse *response) {
     if (response == nullptr) return;
@@ -62,7 +65,7 @@ void GateKeeper::Enroll(const EnrollRequest &request, EnrollResponse *response) 
 
         uint64_t timestamp = GetMillisecondsSinceBoot();
 
-        uint32_t timeout = 0;
+        uint64_t timeout = 0;
         bool throttle = (pw_handle->version >= HANDLE_VERSION_THROTTLE);
         if (throttle) {
             bool throttle_secure = pw_handle->flags & HANDLE_FLAG_THROTTLE_SECURE;
@@ -85,7 +88,7 @@ void GateKeeper::Enroll(const EnrollRequest &request, EnrollResponse *response) 
         if (!DoVerify(pw_handle, request.enrolled_password)) {
             // incorrect old password
             if (throttle && timeout > 0) {
-                response->SetRetryTimeout(timeout);
+                ClampAndSetRetryTimeout(response, timeout);
             } else {
                 response->error = ERROR_INVALID;
             }
@@ -134,7 +137,7 @@ void GateKeeper::Verify(const VerifyRequest &request, VerifyResponse *response) 
 
     uint64_t timestamp = GetMillisecondsSinceBoot();
 
-    uint32_t timeout = 0;
+    uint64_t timeout = 0;
     bool throttle = (password_handle->version >= HANDLE_VERSION_THROTTLE);
     bool throttle_secure = password_handle->flags & HANDLE_FLAG_THROTTLE_SECURE;
     if (throttle) {
@@ -169,7 +172,7 @@ void GateKeeper::Verify(const VerifyRequest &request, VerifyResponse *response) 
     } else {
         // compute the new timeout given the incremented record
         if (throttle && timeout > 0) {
-            response->SetRetryTimeout(timeout);
+            ClampAndSetRetryTimeout(response, timeout);
         } else {
             response->error = ERROR_INVALID;
         }
@@ -292,48 +295,54 @@ gatekeeper_error_t GateKeeper::MintAuthToken(SizedBuffer *auth_token,
     return ERROR_NONE;
 }
 
-/*
- * Calculates the timeout in milliseconds as a function of the failure
- * counter 'x' as follows:
- *
- * [0, 4] -> 0
- * 5 -> 30
- * [6, 10] -> 0
- * [11, 29] -> 30
- * [30, 139] -> 30 * (2^((x - 30)/10))
- * [140, inf) -> 1 day
- *
- */
-uint32_t GateKeeper::ComputeRetryTimeout(const failure_record_t *record) {
-    static const int failure_timeout_ms = 30000;
-    if (record->failure_counter == 0) return 0;
+#define ARRAY_SIZE(A)   (sizeof(A) / sizeof((A)[0]))
 
-    if (record->failure_counter > 0 && record->failure_counter <= 10) {
-        if (record->failure_counter % 5 == 0) {
-            return failure_timeout_ms;
-        }  else {
-            return 0;
-        }
-    } else if (record->failure_counter < 30) {
-        return failure_timeout_ms;
-    } else if (record->failure_counter < 140) {
-        return failure_timeout_ms << ((record->failure_counter - 30) / 10);
+static const uint64_t kDelayTable[] = {
+    /* 0  */ 0,
+    /* 1  */ 0,
+    /* 2  */ 0,
+    /* 3  */ 0,
+    /* 4  */ 0,
+    /* 5  */ 60000,         // 1 minute
+    /* 6  */ 300000,        // 5 minutes
+    /* 7  */ 900000,        // 15 minutes
+    /* 8  */ 1800000,       // 30 minutes
+    /* 9  */ 5400000,       // 90 minutes
+    /* 10 */ 14580000,      // 3^(10-5) minutes = 4.05 hours
+    /* 11 */ 43740000,      // 3^(11-5) minutes = 12.15 hours
+    /* 12 */ 131220000,     // 3^(12-5) minutes = 36.45 hours
+    /* 13 */ 393660000,     // 3^(13-5) minutes = 4.56 days
+    /* 14 */ 1180980000,    // 3^(14-5) minutes = 13.67 days
+    /* 15 */ 3542940000,    // 3^(15-5) minutes = 41.01 days
+    /* 16 */ 10628820000,   // 3^(16-5) minutes = 123.02 days
+    /* 17 */ 31886460000,   // 3^(17-5) minutes = 1.01 years
+    /* 18 */ 95659380000,   // 3^(18-5) minutes = 3.03 years
+    /* 19 */ 286978140000,  // 3^(19-5) minutes = 9.09 years
+};
+
+// Computes the timeout in milliseconds, given the current failure_counter.
+uint64_t GateKeeper::ComputeRetryTimeout(const failure_record_t *record) {
+    if (record->failure_counter < ARRAY_SIZE(kDelayTable)) {
+        return kDelayTable[record->failure_counter];
     }
-
-    return DAY_IN_MS;
+    return kDelayTable[ARRAY_SIZE(kDelayTable) - 1];
 }
 
 bool GateKeeper::ThrottleRequest(uint32_t uid, uint64_t timestamp,
         failure_record_t *record, bool secure, GateKeeperMessage *response) {
-
+    if (record->failure_counter >= ARRAY_SIZE(kDelayTable)) {
+        // no more attempts allowed
+        response->SetRetryTimeout(INT32_MAX);
+        return true;
+    }
     uint64_t last_checked = record->last_checked_timestamp;
-    uint32_t timeout = ComputeRetryTimeout(record);
+    uint64_t timeout = ComputeRetryTimeout(record);
 
     if (timeout > 0) {
         // we have a pending timeout
         if (timestamp < last_checked + timeout && timestamp > last_checked) {
             // attempt before timeout expired, return remaining time
-            response->SetRetryTimeout(timeout - (timestamp - last_checked));
+            ClampAndSetRetryTimeout(response, timeout - (timestamp - last_checked));
             return true;
         } else if (timestamp <= last_checked) {
             // device was rebooted or timer reset, don't count as new failure but
@@ -343,7 +352,7 @@ bool GateKeeper::ThrottleRequest(uint32_t uid, uint64_t timestamp,
                 response->error = ERROR_UNKNOWN;
                 return true;
             }
-            response->SetRetryTimeout(timeout);
+            ClampAndSetRetryTimeout(response, timeout);
             return true;
         }
     }

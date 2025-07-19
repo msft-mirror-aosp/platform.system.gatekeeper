@@ -173,7 +173,7 @@ protected:
      * counter. An implementation is provided by the generic GateKeeper, but may be
      * overriden.
      */
-    virtual uint32_t ComputeRetryTimeout(const failure_record_t *record);
+    virtual uint64_t ComputeRetryTimeout(const failure_record_t *record);
 
     /**
      * Returns whether the GateKeeper implementation is backed by hardware.

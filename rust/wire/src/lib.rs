@@ -45,10 +45,10 @@ use hal_wire_derive::AsCborValue;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, AsCborValue)]
 pub struct MillisecondsSinceEpoch(pub i64);
 
-impl core::ops::Add<u32> for MillisecondsSinceEpoch {
+impl core::ops::Add<i64> for MillisecondsSinceEpoch {
     type Output = Self;
-    fn add(self, rhs: u32) -> Self::Output {
-        Self(self.0.saturating_add(rhs as i64))
+    fn add(self, rhs: i64) -> Self::Output {
+        Self(self.0.saturating_add(rhs))
     }
 }
 
