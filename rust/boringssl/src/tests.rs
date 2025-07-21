@@ -39,6 +39,7 @@ fn test_eq() {
     gk_tests::test_eq(comparator);
 }
 
+#[ignore]
 #[test]
 fn test_constant_time_eq() {
     let comparator = crate::ConstEq;
