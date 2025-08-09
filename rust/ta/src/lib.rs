@@ -82,7 +82,7 @@ impl GatekeeperTa {
                 (Some(req.code()), self.process_req(req))
             }
             Err(e) => {
-                error!("failed to decode CBOR request: {:?}", e);
+                error!("failed to decode CBOR request: {e:?}");
                 (None, PerformOpResponse::Err(ApiStatus::GeneralFailure as i32))
             }
         };
