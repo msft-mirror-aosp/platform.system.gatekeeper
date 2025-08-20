@@ -297,7 +297,7 @@ gatekeeper_error_t GateKeeper::MintAuthToken(SizedBuffer *auth_token,
 
 #define ARRAY_SIZE(A)   (sizeof(A) / sizeof((A)[0]))
 
-static const uint64_t kDelayTable[] = {
+static const uint64_t kTimeoutTable[] = {
     /* 0  */ 0,
     /* 1  */ 0,
     /* 2  */ 0,
@@ -322,15 +322,15 @@ static const uint64_t kDelayTable[] = {
 
 // Computes the timeout in milliseconds, given the current failure_counter.
 uint64_t GateKeeper::ComputeRetryTimeout(const failure_record_t *record) {
-    if (record->failure_counter < ARRAY_SIZE(kDelayTable)) {
-        return kDelayTable[record->failure_counter];
+    if (record->failure_counter < ARRAY_SIZE(kTimeoutTable)) {
+        return kTimeoutTable[record->failure_counter];
     }
-    return kDelayTable[ARRAY_SIZE(kDelayTable) - 1];
+    return kTimeoutTable[ARRAY_SIZE(kTimeoutTable) - 1];
 }
 
 bool GateKeeper::ThrottleRequest(uint32_t uid, uint64_t timestamp,
         failure_record_t *record, bool secure, GateKeeperMessage *response) {
-    if (record->failure_counter >= ARRAY_SIZE(kDelayTable)) {
+    if (record->failure_counter >= ARRAY_SIZE(kTimeoutTable)) {
         // no more attempts allowed
         response->SetRetryTimeout(INT32_MAX);
         return true;
