@@ -89,16 +89,16 @@ fn test_retry_timeout() {
         /* 7  */ 15, //
         /* 8  */ 30, //
         /* 9  */ 90, //
-        /* 10 */ 243, // 3^(10-5) minutes = 4.05 hours
-        /* 11 */ 729, // 3^(11-5) minutes = 12.15 hours
-        /* 12 */ 2187, // 3^(12-5) minutes = 36.45 hours
-        /* 13 */ 6561, // 3^(13-5) minutes = 4.56 days
-        /* 14 */ 19683, // 3^(14-5) minutes = 13.67 days
-        /* 15 */ 59049, // 3^(15-5) minutes = 41.01 days
-        /* 16 */ 177147, // 3^(16-5) minutes = 123.02 days
-        /* 17 */ 531441, // 3^(17-5) minutes = 1.01 years
-        /* 18 */ 1594323, // 3^(18-5) minutes = 3.03 years
-        /* 19 */ 4782969, // 3^(19-5) minutes = 9.09 years
+        /* 10 */ 240, // 4 hours
+        /* 11 */ 720, // 12 hours
+        /* 12 */ 2160, // 36 hours
+        /* 13 */ 5760, // 4 days
+        /* 14 */ 18720, // 13 days
+        /* 15 */ 59040, // 41 days
+        /* 16 */ 177120, // 123 days
+        /* 17 */ 525600, // 1 year
+        /* 18 */ 1576800, // 3 years
+        /* 19 */ 4730400, // 9 years
     ];
     for count in 0..20 {
         let want = Ok(expected_timeouts_in_minutes[count as usize] * 60000);

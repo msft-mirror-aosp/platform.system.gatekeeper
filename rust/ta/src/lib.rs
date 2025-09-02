@@ -68,6 +68,36 @@ pub struct GatekeeperTa {
     shared_secret_params: Option<wire::SharedSecretParameters>,
 }
 
+const ONE_MINUTE: i64 = 60000;
+const ONE_HOUR: i64 = 60 * ONE_MINUTE;
+const ONE_DAY: i64 = 24 * ONE_HOUR;
+const ONE_YEAR: i64 = 365 * ONE_DAY; // intentionally not considering leap years
+
+/// Array that maps values of the failure counter to the timeout (in milliseconds) that the
+/// Gatekeeper TA enforces after that number of failures.
+const TIMEOUT_TABLE: &[i64] = &[
+    /* 0  */ 0,
+    /* 1  */ 0,
+    /* 2  */ 0,
+    /* 3  */ 0,
+    /* 4  */ 0,
+    /* 5  */ ONE_MINUTE,
+    /* 6  */ 5 * ONE_MINUTE,
+    /* 7  */ 15 * ONE_MINUTE,
+    /* 8  */ 30 * ONE_MINUTE,
+    /* 9  */ 90 * ONE_MINUTE,
+    /* 10 */ 4 * ONE_HOUR,
+    /* 11 */ 12 * ONE_HOUR,
+    /* 12 */ 36 * ONE_HOUR,
+    /* 13 */ 4 * ONE_DAY,
+    /* 14 */ 13 * ONE_DAY,
+    /* 15 */ 41 * ONE_DAY,
+    /* 16 */ 123 * ONE_DAY,
+    /* 17 */ ONE_YEAR,
+    /* 18 */ 3 * ONE_YEAR,
+    /* 19 */ 9 * ONE_YEAR,
+];
+
 impl GatekeeperTa {
     /// Create a new [`GatekeeperTa`] instance.
     pub fn new(imp: traits::Implementation) -> Self {
@@ -472,18 +502,9 @@ impl FailureRecord {
     /// Compute the next timeout for the failure record, in milliseconds, based on
     /// the failure count.
     pub fn compute_retry_timeout(&self) -> Result<i64, Error> {
-        match self.failure_counter {
-            0..=4 => Ok(0),
-            5 => Ok(60000),   // 1 minute
-            6 => Ok(300000),  // 5 minutes
-            7 => Ok(900000),  // 15 minutes
-            8 => Ok(1800000), // 30 minutes
-            9 => Ok(5400000), // 90 minutes
-            10..=19 => {
-                // Exponential increase from 4.05 hours to 9.09 years
-                Ok(3_i64.pow(self.failure_counter - 5) * 60000)
-            }
-            _ => {
+        match TIMEOUT_TABLE.get(self.failure_counter as usize) {
+            Some(timeout) => Ok(*timeout),
+            None => {
                 info!("no more attempts allowed after {} failures", self.failure_counter);
                 Err(Error::RetryTimeout(i32::MAX))
             }
