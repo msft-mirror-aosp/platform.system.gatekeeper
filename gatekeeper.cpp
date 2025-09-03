@@ -297,27 +297,34 @@ gatekeeper_error_t GateKeeper::MintAuthToken(SizedBuffer *auth_token,
 
 #define ARRAY_SIZE(A)   (sizeof(A) / sizeof((A)[0]))
 
+constexpr uint64_t kOneMinute = 60000;
+constexpr uint64_t kOneHour = 60 * kOneMinute;
+constexpr uint64_t kOneDay = 24 * kOneHour;
+constexpr uint64_t kOneYear = 365 * kOneDay; // intentionally not considering leap years
+
+// Array that maps values of the failure counter to the timeout (in milliseconds) that the
+// Gatekeeper TA enforces after that number of failures.
 static const uint64_t kTimeoutTable[] = {
     /* 0  */ 0,
     /* 1  */ 0,
     /* 2  */ 0,
     /* 3  */ 0,
     /* 4  */ 0,
-    /* 5  */ 60000,         // 1 minute
-    /* 6  */ 300000,        // 5 minutes
-    /* 7  */ 900000,        // 15 minutes
-    /* 8  */ 1800000,       // 30 minutes
-    /* 9  */ 5400000,       // 90 minutes
-    /* 10 */ 14580000,      // 3^(10-5) minutes = 4.05 hours
-    /* 11 */ 43740000,      // 3^(11-5) minutes = 12.15 hours
-    /* 12 */ 131220000,     // 3^(12-5) minutes = 36.45 hours
-    /* 13 */ 393660000,     // 3^(13-5) minutes = 4.56 days
-    /* 14 */ 1180980000,    // 3^(14-5) minutes = 13.67 days
-    /* 15 */ 3542940000,    // 3^(15-5) minutes = 41.01 days
-    /* 16 */ 10628820000,   // 3^(16-5) minutes = 123.02 days
-    /* 17 */ 31886460000,   // 3^(17-5) minutes = 1.01 years
-    /* 18 */ 95659380000,   // 3^(18-5) minutes = 3.03 years
-    /* 19 */ 286978140000,  // 3^(19-5) minutes = 9.09 years
+    /* 5  */ kOneMinute,
+    /* 6  */ 5 * kOneMinute,
+    /* 7  */ 15 * kOneMinute,
+    /* 8  */ 30 * kOneMinute,
+    /* 9  */ 90 * kOneMinute,
+    /* 10 */ 4 * kOneHour,
+    /* 11 */ 12 * kOneHour,
+    /* 12 */ 36 * kOneHour,
+    /* 13 */ 4 * kOneDay,
+    /* 14 */ 13 * kOneDay,
+    /* 15 */ 41 * kOneDay,
+    /* 16 */ 123 * kOneDay,
+    /* 17 */ kOneYear,
+    /* 18 */ 3 * kOneYear,
+    /* 19 */ 9 * kOneYear,
 };
 
 // Computes the timeout in milliseconds, given the current failure_counter.
