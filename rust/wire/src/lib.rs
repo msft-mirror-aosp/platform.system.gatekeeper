@@ -35,6 +35,7 @@ use cbor::value::Value;
 use enumn::N;
 use hal_wire::{cbor_type_error, mem, vec_try, AsCborValue, CborError};
 use hal_wire_derive::AsCborValue;
+use zeroize::ZeroizeOnDrop;
 
 /// Milliseconds since an arbitrary epoch.  This must be monotonically increasing and not repeat
 /// before device reboot, and should also count time passing while the device is suspended.
@@ -96,7 +97,7 @@ impl PasswordHandle {
 
 /// A user password.
 #[repr(transparent)]
-#[derive(AsCborValue)] // deliberately not `Debug`
+#[derive(ZeroizeOnDrop)] // deliberately not `Debug`
 pub struct Password(pub Vec<u8>);
 
 impl Password {
@@ -107,6 +108,17 @@ impl Password {
         } else {
             Some(Password(password.to_vec()))
         }
+    }
+}
+
+impl AsCborValue for Password {
+    fn to_cbor_value(mut self) -> Result<Value, CborError> {
+        let inner = core::mem::take(&mut self.0);
+        inner.to_cbor_value()
+    }
+
+    fn from_cbor_value(value: Value) -> Result<Self, CborError> {
+        Vec::<u8>::from_cbor_value(value).map(Password)
     }
 }
 
