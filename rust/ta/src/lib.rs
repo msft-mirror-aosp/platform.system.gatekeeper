@@ -185,7 +185,9 @@ impl GatekeeperTa {
         }
     }
 
-    fn delete_all_users(&mut self) -> Result<(), Error> {
+    /// Deletes all enrolled password handles for all uid's.
+    /// Once called, no users must be enrolled on the device.
+    pub fn delete_all_users(&mut self) -> Result<(), Error> {
         info!("delete all users");
         self.imp.failures.clear_all()
     }
