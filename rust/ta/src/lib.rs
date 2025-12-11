@@ -192,7 +192,9 @@ impl GatekeeperTa {
         self.imp.failures.clear_all()
     }
 
-    fn delete_user(&mut self, user_id: wire::AndroidUserId) -> Result<(), Error> {
+    /// Deletes the enrolledPasswordHandle associated with the uid.
+    /// Once deleted, the user cannot be verified anymore.
+    pub fn delete_user(&mut self, user_id: wire::AndroidUserId) -> Result<(), Error> {
         info!("delete user {user_id:?}");
         let deleted = self.imp.failures.clear(user_id)?;
         if !deleted {
@@ -203,7 +205,19 @@ impl GatekeeperTa {
         }
     }
 
-    fn enroll(
+    /// Enrolls `new_password`, which may be derived from a user selected pin
+    /// or password, with the private key used only for enrolling authentication
+    /// factor data.
+    ///
+    /// If an already-enrolled password handle is included in `current_handle` (a "trusted
+    /// re-enroll"), then `current_password` must also be included, and must verify() against
+    /// `current_handle`. On success, the response must re-use the same secure user ID as
+    /// in the previous enrollment.
+    ///
+    /// If `current_handle` and `current_password` are empty, then the `new_password`
+    /// should be enrolled (an "untrusted re-enroll"), even if there is an existing enrollment
+    /// for the user. A fresh secure user ID must be returned in the response.
+    pub fn enroll(
         &mut self,
         user_id: AndroidUserId,
         current_handle: &Option<wire::PasswordHandle>,
@@ -244,7 +258,8 @@ impl GatekeeperTa {
         Ok((sid, handle.to_wire()?))
     }
 
-    fn verify(
+    /// Verifies that `password` matches `handle`.
+    pub fn verify(
         &mut self,
         user_id: AndroidUserId,
         challenge: i64,
